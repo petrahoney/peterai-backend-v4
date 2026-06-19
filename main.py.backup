@@ -1,0 +1,38 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = FastAPI(title="PETER AI Backend")
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy", "message": "PETER AI Backend Running"}
+
+@app.get("/")
+async def root():
+    return {"message": "PETER AI v4.0 Backend API"}
+
+@app.post("/api/test-task")
+async def test_task():
+    """Test task to local GPU worker"""
+    return {
+        "task_id": "test-123",
+        "status": "queued",
+        "message": "Task sent to GPU worker (test)"
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

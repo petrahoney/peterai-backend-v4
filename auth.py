@@ -26,11 +26,13 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+import hashlib
 
-def get_password_hash(password):
-    return pwd_context.hash(password[:72])
+def get_password_hash(password: str):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(plain_password, hashed_password):
+    return hashlib.sha256(plain_password.encode()).hexdigest() == hashed_password
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()

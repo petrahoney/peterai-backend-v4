@@ -1,0 +1,6 @@
+[build]
+builder = "nixpacks"
+
+[[build.variables]]
+name = "MISE_PYTHON_GITHUB_ATTESTATIONS"
+value = "false"

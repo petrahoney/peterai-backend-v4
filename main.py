@@ -151,6 +151,23 @@ async def list_videos(token: str = None, db: Session = Depends(get_db)):
     videos = db.query(Video).filter(Video.user_id == user.id).all()
     return videos
 
+@app.post("/api/videos/create")
+def create_video(video: VideoCreate, token: str = Query(...), db: Session = Depends(get_db)):
+    user = decode_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    db_video = Video(
+        user_id=user["sub"],
+        title=video.title,
+        description=video.description,
+        status="processing"
+    )
+    db.add(db_video)
+    db.commit()
+    db.refresh(db_video)
+    return VideoResponse.from_orm(db_video)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

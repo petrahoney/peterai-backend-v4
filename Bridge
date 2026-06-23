@@ -1,0 +1,26 @@
+# peterai-backend/main.py — ADD THIS
+
+import httpx
+
+BRIDGE_URL = "http://47.254.144.78:9000"  # Your Aliyun VPS IP
+
+@app.post("/v1/chat")
+async def gateway_chat(request: dict):
+    """Forward to local GPU worker bridge"""
+    async with httpx.AsyncClient(timeout=120) as client:
+        response = await client.post(
+            f"{BRIDGE_URL}/v1/chat",
+            json=request,
+            headers=request.get("headers", {})
+        )
+    return response.json()
+
+@app.get("/health")
+async def health():
+    """Check bridge health"""
+    async with httpx.AsyncClient(timeout=5) as client:
+        try:
+            resp = await client.get(f"{BRIDGE_URL}/health")
+            return {"status": "healthy", "bridge": resp.json()}
+        except:
+            return {"status": "degraded", "bridge": "error"}

@@ -1,13 +1,9 @@
 nohup: ignoring input
-INFO:     Started server process [104447]
+INFO:     Started server process [147455]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
-/home/admin/peterai-backend/main.py:33: DeprecationWarning: The model 'claude-opus-4-1-20250805' is deprecated and will reach end-of-life on August 5th, 2026.
-Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resources/model-deprecations for more information.
-  response = anthropic_client.messages.create(
-INFO:     127.0.0.1:47606 - "POST /api/chat HTTP/1.1" 200 OK
-/home/admin/peterai-backend/main.py:33: DeprecationWarning: The model 'claude-opus-4-1-20250805' is deprecated and will reach end-of-life on August 5th, 2026.
-Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resources/model-deprecations for more information.
-  response = anthropic_client.messages.create(
-INFO:     127.0.0.1:59136 - "POST /api/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52348 - "POST /api/chat HTTP/1.1" 503 Service Unavailable
+[RETRY] API overloaded, waiting 1s... (attempt 1/3)
+[RETRY] API overloaded, waiting 2s... (attempt 2/3)
+INFO:     127.0.0.1:51358 - "POST /api/chat HTTP/1.1" 503 Service Unavailable

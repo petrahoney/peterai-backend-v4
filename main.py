@@ -1,65 +1,68 @@
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from anthropic import Anthropic
-import os
+from pydantic import BaseModel
 import httpx
+import os
 from dotenv import load_dotenv
+import asyncio
 
 load_dotenv()
 
-app = FastAPI(title="PETER AI v4.0 Backend")
+app = FastAPI()
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+class ChatRequest(BaseModel):
+    message: str
 
-anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-BRIDGE_URL = "http://47.254.144.78:9000"
+async def call_claude(message: str) -> str:
+    timeout = httpx.Timeout(60.0, connect=10.0)
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01"},
+                    json={"model": "claude-sonnet-4-6", "max_tokens": 1024, "messages": [{"role": "user", "content": message}]},
+                )
+                data = response.json()
+                
+                if "error" in data:
+                    error_type = data["error"].get("type", "unknown")
+                    if error_type == "overloaded_error" and attempt < max_retries - 1:
+                        wait = 2 ** attempt
+                        print(f"[RETRY] API overloaded, waiting {wait}s... (attempt {attempt+1}/{max_retries})")
+                        await asyncio.sleep(wait)
+                        continue
+                    raise HTTPException(status_code=503, detail=f"API Error: {data['error']['message']}")
+                
+                if "content" not in data or not data["content"]:
+                    raise HTTPException(status_code=500, detail="Invalid response")
+                
+                return data["content"][0]["text"]
+        except asyncio.TimeoutError:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 ** attempt)
+                continue
+            raise HTTPException(status_code=504, detail="Request timeout")
+
+VALID_API_KEYS = {"sk-peter-demo": "free", "sk-peter-pro": "pro"}
+
+@app.post("/api/chat")
+async def chat(request: Request):
+    api_key = request.headers.get("x-api-key", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing x-api-key")
+    if api_key not in VALID_API_KEYS:
+        raise HTTPException(status_code=401, detail="Invalid key")
+    
+    body = await request.json()
+    response = await call_claude(body["message"])
+    return {"response": response, "model": "claude-sonnet-4-6", "tier": VALID_API_KEYS[api_key]}
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "message": "PETER AI Backend Running"}
-
-@app.post("/api/chat")
-async def chat(request: dict):
-    """Chat with PETER AI using Anthropic"""
-    message = request.get("message")
-    
-    if not message:
-        raise HTTPException(400, "message required")
-    
-    response = anthropic_client.messages.create(
-        model="claude-opus-4-1-20250805",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": message}]
-    )
-    
-    return {
-        "response": response.content[0].text,
-        "tokens_used": response.usage.input_tokens + response.usage.output_tokens
-    }
-
-@app.post("/v1/chat")
-async def gateway_chat(request_body: dict, request: Request):
-    """Gateway → Bridge → Backend → Anthropic"""
-    headers = {
-        "Authorization": request.headers.get("authorization", ""),
-        "X-User-Id": request.headers.get("x-user-id", ""),
-        "X-Tenant-Id": request.headers.get("x-tenant-id", ""),
-        "Content-Type": "application/json"
-    }
-    
-    async with httpx.AsyncClient(timeout=120) as client:
-        response = await client.post(
-            f"{BRIDGE_URL}/v1/chat",
-            json=request_body,
-            headers=headers
-        )
-    return response.json()
+    return {"status": "ok"}
 
 if __name__ == "__main__":
     import uvicorn

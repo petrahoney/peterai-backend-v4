@@ -1,13 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from anthropic import Anthropic
 import os
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="PETER AI Backend")
+app = FastAPI(title="PETER AI v4.0 Backend")
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,23 +17,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+BRIDGE_URL = "http://47.254.144.78:9000"
+
 @app.get("/health")
 async def health():
     return {"status": "healthy", "message": "PETER AI Backend Running"}
 
-@app.get("/")
-async def root():
-    return {"message": "PETER AI v4.0 Backend API"}
-
-@app.post("/api/test-task")
-async def test_task():
-    """Test task to local GPU worker"""
+@app.post("/api/chat")
+async def chat(request: dict):
+    """Chat with PETER AI using Anthropic"""
+    message = request.get("message")
+    
+    if not message:
+        raise HTTPException(400, "message required")
+    
+    response = anthropic_client.messages.create(
+        model="claude-opus-4-1-20250805",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": message}]
+    )
+    
     return {
-        "task_id": "test-123",
-        "status": "queued",
-        "message": "Task sent to GPU worker (test)"
+        "response": response.content[0].text,
+        "tokens_used": response.usage.input_tokens + response.usage.output_tokens
     }
+
+@app.post("/v1/chat")
+async def gateway_chat(request_body: dict, request: Request):
+    """Gateway → Bridge → Backend → Anthropic"""
+    headers = {
+        "Authorization": request.headers.get("authorization", ""),
+        "X-User-Id": request.headers.get("x-user-id", ""),
+        "X-Tenant-Id": request.headers.get("x-tenant-id", ""),
+        "Content-Type": "application/json"
+    }
+    
+    async with httpx.AsyncClient(timeout=120) as client:
+        response = await client.post(
+            f"{BRIDGE_URL}/v1/chat",
+            json=request_body,
+            headers=headers
+        )
+    return response.json()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

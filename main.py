@@ -43,17 +43,17 @@ async def chat(request: dict):
         "tokens_used": response.usage.input_tokens + response.usage.output_tokens
     }
 
-@app.post("/v1/chat")
-async def gateway_chat(request: dict):
+from fastapi import Request
+
+if __name__ == "__main__": import uvicorn uvicorn.run(app, host="0.0.0.0", port=8001) @app.post("/v1/chat") async def 
+gateway_chat(request_body: dict, request: Request):
     """Gateway → Bridge → Backend → Anthropic"""
-    async with httpx.AsyncClient(timeout=120) as client:
-        response = await client.post(
-            f"{BRIDGE_URL}/v1/chat",
-            json=request,
-            headers=request.get("headers", {})
+    # Forward headers from original request
+    headers = { "Authorization": request.headers.get("Authorization", ""), "X-User-Id": request.headers.get("X-User-Id", ""), 
+        "X-Tenant-Id": request.headers.get("X-Tenant-Id", ""), "Content-Type": "application/json"
+    }
+    
+    async with httpx.AsyncClient(timeout=120) as client: response = await client.post( f"{BRIDGE_URL}/v1/chat", 
+            json=request_body, headers=headers
         )
     return response.json()
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)

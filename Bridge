@@ -1,11 +1,7 @@
 BRIDGE_URL = "http://47.254.144.78:9000"
 
 @app.post("/v1/chat")
-async def gateway_chat(request: dict):
+async def chat(request: dict):
     async with httpx.AsyncClient(timeout=120) as client:
-        response = await client.post(
-            f"{BRIDGE_URL}/v1/chat",
-            json=request,
-            headers=request.get("headers", {})
-        )
+        response = await client.post(f"{BRIDGE_URL}/v1/chat", json=request)
     return response.json()

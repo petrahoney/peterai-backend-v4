@@ -18,7 +18,7 @@ app.add_middleware(
 )
 
 anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-BRIDGE_URL = "http://localhost:9000"
+BRIDGE_URL = "http://47.254.144.78:9000"
 
 @app.get("/health")
 async def health():

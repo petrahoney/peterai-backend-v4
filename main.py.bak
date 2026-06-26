@@ -4,18 +4,14 @@ import httpx
 import os
 from dotenv import load_dotenv
 import asyncio
-from autonomous_executor import executor
 
 load_dotenv()
 
 app = FastAPI()
-
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 class ChatRequest(BaseModel):
     message: str
-
-VALID_API_KEYS = {"sk-peter-demo": "free", "sk-peter-pro": "pro"}
 
 async def call_claude(message: str) -> str:
     timeout = httpx.Timeout(60.0, connect=10.0)
@@ -26,61 +22,55 @@ async def call_claude(message: str) -> str:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(
                     "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "x-api-key": ANTHROPIC_API_KEY,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
-                    json={
-                        "model": "claude-sonnet-4-6",
-                        "max_tokens": 1024,
-                        "system": "You are PETER AI, a luxury multi-model assistant. Respond with elegance and precision.",
-                        "messages": [{"role": "user", "content": message}],
-                    },
+                    headers={"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01"},
+                    json={"model": "claude-sonnet-4-6", "max_tokens": 1024, "messages": [{"role": "user", "content": message}]},
                 )
-            
-            if response.status_code == 200:
                 data = response.json()
-                if "content" in data and len(data["content"]) > 0:
-                    return data["content"][0]["text"]
-                else:
-                    return "Error: No content in response"
-            elif response.status_code == 529:
-                if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt
-                    await asyncio.sleep(wait_time)
-                    continue
-                return f"Error: API overloaded after {max_retries} retries"
-            else:
-                return f"Error: {response.status_code} - {response.text}"
-        
-        except Exception as e:
+                
+                if "error" in data:
+                    error_type = data["error"].get("type", "unknown")
+                    if error_type == "overloaded_error" and attempt < max_retries - 1:
+                        wait = 2 ** attempt
+                        print(f"[RETRY] API overloaded, waiting {wait}s... (attempt {attempt+1}/{max_retries})")
+                        await asyncio.sleep(wait)
+                        continue
+                    raise HTTPException(status_code=503, detail=f"API Error: {data['error']['message']}")
+                
+                if "content" not in data or not data["content"]:
+                    raise HTTPException(status_code=500, detail="Invalid response")
+                
+                return data["content"][0]["text"]
+        except asyncio.TimeoutError:
             if attempt < max_retries - 1:
                 await asyncio.sleep(2 ** attempt)
-            else:
-                return f"Error: {str(e)}"
+                continue
+            raise HTTPException(status_code=504, detail="Request timeout")
+
+VALID_API_KEYS = {"sk-peter-demo": "free", "sk-peter-pro": "pro"}
 
 @app.post("/api/chat")
 async def chat(request: Request):
     api_key = request.headers.get("x-api-key", "").strip()
-    
-    if not api_key or api_key not in VALID_API_KEYS:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing x-api-key")
+    if api_key not in VALID_API_KEYS:
+        raise HTTPException(status_code=401, detail="Invalid key")
     
     body = await request.json()
-    message = body.get("message")
-    
-    if not message:
-        raise HTTPException(status_code=400, detail="Message required")
-    
-    response = await call_claude(message)
-    return {"response": response}
+    response = await call_claude(body["message"])
+    return {"response": response, "model": "claude-sonnet-4-6", "tier": VALID_API_KEYS[api_key]}
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
+
 # ============ AUTONOMOUS AGENT ENDPOINTS ============
+
+from autonomous_executor import executor
 
 @app.post("/api/autonomous/plan")
 async def plan_autonomous_task(request: Request):
@@ -115,7 +105,3 @@ async def get_autonomous_task(task_id: str, request: Request):
     
     result = executor.get_task_status(task_id)
     return result
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
